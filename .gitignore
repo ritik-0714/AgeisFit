@@ -8,3 +8,11 @@ node_modules/
 android/build/
 android/.gradle/
 /AegisFit/
+
+db.json
+db.json.tmp
+.env
+node_modules/
+android/build/
+android/.gradle/
+/AegisFit/
