@@ -100,6 +100,26 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Demo mode: no real SMTP, so the code is returned in the response ONLY outside production.
 // Wire in Nodemailer + SMTP here to send it for real.
 const newCode = () => String(crypto.randomInt(100000, 1000000));
+// SHOW_VERIFY_CODE=1 returns the code in the API response (demo only). Leave unset once real email works.
+const SHOW_CODE = !PRODUCTION || process.env.SHOW_VERIFY_CODE === "1";
+// Optional real email via SMTP. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM and run: npm i nodemailer
+let mailer = null;
+if (process.env.SMTP_HOST) {
+  try {
+    const nm = await import("nodemailer");
+    mailer = nm.default.createTransport({ host: process.env.SMTP_HOST, port: +process.env.SMTP_PORT || 587,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } });
+  } catch { console.error("SMTP_HOST is set but nodemailer is not installed. Run: npm i nodemailer"); }
+}
+const sendCode = async (to, code) => {
+  if (!mailer) return false;
+  try {
+    await mailer.sendMail({ from: process.env.MAIL_FROM || process.env.SMTP_USER, to,
+      subject: "Your AegisFit verification code",
+      text: `Your AegisFit verification code is ${code}. Do not share it with anyone.` });
+    return true;
+  } catch (e) { console.error("mail:", e.message); return false; }
+};
 
 app.post("/api/auth/register", limit(registerLim, r => r.ip, "Too many sign-ups from this network. Try later."), ah(async (req, res) => {
   const name = str(req.body.name, 60), email = str(req.body.email, 254)?.toLowerCase(), password = req.body.password;
@@ -109,7 +129,8 @@ app.post("/api/auth/register", limit(registerLim, r => r.ip, "Too many sign-ups 
   const code = newCode();
   const u = { id: id(), name, email, hash: await bcrypt.hash(password, 10), verified: false, verifyCode: code, verifyTries: 0 };
   db.users.push(u); save();
-  res.json({ ...tok(u), ...(PRODUCTION ? {} : { devVerifyCode: code }) });
+  await sendCode(email, code);
+  res.json({ ...tok(u), ...(SHOW_CODE ? { devVerifyCode: code } : {}) });
 }));
 app.post("/api/auth/verify", auth, limit(verifyLim, r => r.uid, "Too many attempts. Request a new code."), (req, res) => {
   const u = req.user;
@@ -117,11 +138,12 @@ app.post("/api/auth/verify", auth, limit(verifyLim, r => r.uid, "Too many attemp
   if (!u.verifyCode || u.verifyCode !== String(req.body.code || "").trim()) return res.status(400).json({ error: "Incorrect verification code" });
   u.verified = true; u.verifyCode = null; save(); res.json({ verified: true });
 });
-app.post("/api/auth/resend", auth, limit(resendLim, r => r.uid, "Too many code requests. Try again later."), (req, res) => {
+app.post("/api/auth/resend", auth, limit(resendLim, r => r.uid, "Too many code requests. Try again later."), async (req, res) => {
   const u = req.user;
   if (u.verified) return res.json({ verified: true });
   u.verifyCode = newCode(); save();
-  res.json({ ok: true, ...(PRODUCTION ? {} : { devVerifyCode: u.verifyCode }) });
+  await sendCode(u.email, u.verifyCode);
+  res.json({ ok: true, ...(SHOW_CODE ? { devVerifyCode: u.verifyCode } : {}) });
 });
 app.post("/api/auth/login", ah(async (req, res) => {
   const email = String(req.body.email || "").trim().toLowerCase(), acct = email + "|" + req.ip;

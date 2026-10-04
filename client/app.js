@@ -24,9 +24,11 @@ window.doAuth=async()=>{
     $("#pw").value="";
     if(reg&&!j.verified){
       $("#aerr").style.color="var(--g)";
-      $("#aerr").textContent="Account created. (Demo mode: no real email is sent — verification code shown here) → "+j.devVerifyCode;
+      $("#aerr").textContent=j.devVerifyCode
+        ?"Account created. (Demo mode: no real email is sent) Your verification code → "+j.devVerifyCode
+        :"Account created. Enter the verification code sent to your email.";
       setTimeout(()=>{
-        const c=prompt("Enter the 6-digit verification code shown above:");
+        const c=prompt(j.devVerifyCode?"Demo mode. Your verification code is "+j.devVerifyCode+"\nEnter it here:":"Enter the 6-digit verification code sent to your email:");
         if(c)api("/api/auth/verify","POST",{code:c.trim()}).then(()=>{VERIFIED=true;boot()}).catch(e=>{alert(e.message);boot()});
         else boot();
       },300);
@@ -114,7 +116,14 @@ window.sendLog=async()=>{
   try{await api("/api/logs","POST",{min,rpe});dash()}catch(e){fail(e)}
 };
 window.wearSync=async()=>{try{const j=await api("/api/wearable/sync","POST",{provider:"strava"});alert(`Imported ${j.imported} new, skipped ${j.skipped} already-synced activities.`);dash()}catch(e){fail(e)}};
-window.resendVerify=async()=>{const c=prompt("Demo mode — check the code shown at signup, or re-register to get a new one. Enter code:");if(c)try{await api("/api/auth/verify","POST",{code:c.trim()});dash()}catch(e){fail(e)}};
+window.resendVerify=async()=>{
+  try{
+    const r=await api("/api/auth/resend","POST",{});
+    if(r.verified){dash();return}
+    const c=prompt(r.devVerifyCode?"Demo mode. Your new code is "+r.devVerifyCode+"\nEnter it here:":"A new code was sent to your email. Enter it here:");
+    if(c){await api("/api/auth/verify","POST",{code:c.trim()});dash()}
+  }catch(e){fail(e)}
+};
 
 // ---- AI Plan ----
 async function planTab(){
