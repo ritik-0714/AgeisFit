@@ -1,3 +1,10 @@
 node_modules/
 .env
 android/.gradle/
+db.json
+db.json.tmp
+.env
+node_modules/
+android/build/
+android/.gradle/
+/AegisFit/
