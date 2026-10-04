@@ -1,0 +1,102 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>AegisFit</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#06080c;--card:#0e1219;--bd:#1b222d;--tx:#f1f5f9;--mu:#8a96a8;--g:#34d399;--gd:#059669;--lime:#a3e635;--rd:#f43f5e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px system-ui,sans-serif}
+header{display:flex;gap:16px;align-items:center;padding:12px 20px;border-bottom:1px solid var(--bd);flex-wrap:wrap}
+.logo{font-size:20px;font-weight:900;font-style:italic}.logo i{color:var(--lime)}
+nav{margin-left:auto;display:flex;gap:6px}nav button{background:none;border:1px solid transparent;color:var(--mu);padding:8px 14px;border-radius:10px;cursor:pointer;font:inherit}
+nav button.on{background:#161b24;border-color:var(--bd);color:var(--tx)}
+main{max-width:1100px;margin:auto;padding:18px}.card{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:18px;margin-bottom:16px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.two{display:grid;gap:16px;grid-template-columns:1.6fr 1fr}@media(max-width:800px){.two{grid-template-columns:1fr}}
+.pill{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:10px 14px;color:var(--tx);text-align:left;cursor:pointer;font:inherit}
+.pill.on{border-color:#34d39980}.pill small{display:block;color:var(--mu);font:11px monospace}
+.btn{background:var(--gd);color:#fff;border:0;border-radius:10px;padding:10px 18px;font:600 14px inherit;cursor:pointer}
+.in{background:#080a0f;border:1px solid var(--bd);border-radius:12px;padding:11px 14px;color:var(--tx);font:inherit;flex:1;min-width:0}
+.stage{position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:4/3}
+.stage video,.stage canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.big{font:800 56px monospace;color:var(--g)}.mu{color:var(--mu)}.bar{height:8px;background:#1a202b;border-radius:9px;overflow:hidden}.bar i{display:block;height:100%;background:var(--g)}
+.hidden{display:none}.r{display:flex;gap:12px;align-items:center;padding:12px;border:1px solid var(--bd);border-radius:12px;margin-bottom:8px;background:#080a0f}
+.r img{width:56px;height:56px;object-fit:contain;background:#fff;border-radius:8px}.r .p{margin-left:auto;text-align:right;font-weight:800;font-size:17px}
+.best{border-color:var(--g);background:#34d39912}.tag{font:10px monospace;color:#04120c;background:var(--g);padding:2px 8px;border-radius:99px}
+a{color:var(--g)}
+header{background:#06080c;position:sticky;top:0;z-index:5}.tg{background:#34d39915;border:1px solid #34d39960;color:var(--g);font:700 10px monospace;letter-spacing:.8px;padding:6px 11px;border-radius:8px;cursor:pointer}.tg.off{opacity:.4}.vw{background:none;border:0;color:var(--tx);font:11px monospace;padding:6px 8px;cursor:pointer;border-radius:6px}.vw.on{background:#34d39920;border:1px solid #34d39960;color:var(--g)}.ov{position:absolute;top:12px;z-index:2;display:flex;gap:6px;align-items:center;background:#0a0d12dd;border:1px solid var(--bd);border-radius:12px;padding:6px 10px}</style></head><body>
+<header><div style="display:flex;gap:10px;align-items:center"><div style="width:42px;height:42px;border:1px solid var(--bd);border-radius:12px;background:#0d1320;display:grid;place-items:center;font-size:20px">🛡️</div><div><div class="logo" style="line-height:1.1">AEGIS<i>FIT</i></div><div style="font:9px monospace;letter-spacing:1.4px;color:var(--mu)">PERSONAL FITNESS &amp; HEALTH COMPANION</div></div></div><nav>
+<button id="t3" class="on" onclick="tab(3)">▦ Dashboard</button><button id="t6" onclick="tab(6)">⚭ Connect</button><button id="t7" onclick="tab(7)">⎋ Devices</button><button id="t1" onclick="tab(1)">◉ AI Form Check</button><button id="t5" onclick="tab(5)">⛨ 3D Injury Map</button><button id="t2" onclick="tab(2)">🛍 Equipment Store</button><button id="t4" onclick="tab(4)">✦ AI Plan</button><button onclick="logout()" style="background:#0d1320;border:1px solid #1e2a44;color:var(--tx);border-radius:10px;padding:8px 14px;cursor:pointer;font:inherit">Logout</button></nav></header>
+<main>
+<section id="pa"><div class="card" style="max-width:420px;margin:40px auto"><h2 id="atit" style="margin-top:0">Login to AegisFit</h2>
+<input class="in" id="nm" placeholder="Full name" style="display:none;margin-bottom:10px;width:100%"><input class="in" id="em" placeholder="Email" style="margin-bottom:10px;width:100%"><input class="in" id="pw" type="password" placeholder="Password (6+ chars)" style="margin-bottom:12px;width:100%">
+<button class="btn" style="width:100%" onclick="doAuth()">Continue</button><p class="mu" id="aerr" style="color:var(--rd)"></p><p class="mu"><a href="#" onclick="flip();return false" id="aflip">Create an account</a></p></div></section>
+<section id="p3" class="hidden"></section><section id="p4" class="hidden"></section><section id="p5" class="hidden"></section><section id="p6" class="hidden"></section><section id="p7" class="hidden"></section>
+<section id="p1" class="hidden"><div class="grid" id="exs" style="margin-bottom:16px"></div>
+<div class="two"><div class="card"><div class="stage"><video id="v" playsinline muted></video><canvas id="c"></canvas></div>
+<div style="margin-top:12px;display:flex;gap:10px;align-items:center"><button class="btn" id="go" onclick="start()">Start Camera</button><button class="btn" style="background:#1a202b" onclick="saveSess()">Save session</button><span id="msg" class="mu">Stand 2–3 m back so your full body is visible.</span></div></div>
+<div><div class="card"><div class="mu" style="font:11px monospace">COMPLETED REPS</div><div class="big" id="reps">0</div><div class="mu">Phase: <b id="ph">READY</b> · Angle: <b id="an">–</b></div></div>
+<div class="card"><b>Movement quality</b> <b id="q" style="float:right;color:var(--g)">–</b><div class="bar" style="margin:12px 0"><i id="qb" style="width:0"></i></div><div class="mu" id="cue">—</div></div></div></div></section>
+
+<section id="p2" class="hidden"><div class="card"><h2 style="margin-top:0">Smart Equipment &amp; Gear Store</h2><p class="mu" style="margin-top:-6px">Product discovery and price comparison across Amazon, Flipkart, Decathlon and Myntra.</p>
+<div style="display:flex;gap:10px;flex-wrap:wrap"><input class="in" id="q2" placeholder="e.g. 10kg dumbbells, whey protein, running shoes" onkeydown="if(event.key==='Enter')search()"><button class="btn" onclick="search()">Search</button></div>
+<div style="display:flex;gap:8px;margin-top:14px"><button class="pill on" id="sortChoice" onclick="setSort('choice')">⭐ By Our Choice</button><button class="pill" id="sortPrice" onclick="setSort('price')">₹ By Lowest Price</button></div></div>
+<div id="res"></div></section></main>
+
+<script type="module">
+import { PoseLandmarker, FilesetResolver, DrawingUtils } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+const $=s=>document.querySelector(s);
+// [name, hint, joints(A,B,C), threshold, mode]
+// 8 exercises per report §5 AI Vision Trainer Module: Squat, Push-up, Lunge, Bicep Curl, Overhead Press, Jumping Jack, Plank, Side Lateral Raise
+const EX=[["Squat","Knee <100°",[23,25,27],100,"down","Chest up, hips below knees."],["Push-up","Elbow <90°",[11,13,15],90,"down","Body in a straight line."],["Lunge","Front knee <105°",[23,25,27],105,"down","Front knee tracks over toes, torso upright."],["Bicep Curl","Flexion <55°",[11,13,15],55,"down","Pin elbows to your sides."],["Overhead Press","Lockout >155°",[11,13,15],155,"up","Press to full lockout overhead."],["Jumping Jack","Arm raise >140°",[23,11,15],140,"up","Full arm range each rep, land softly."],["Plank","Spine 165–185°",[11,23,27],165,"hold","Squeeze glutes, don't sag."],["Side Lateral Raise","Abduction >80°",[23,11,13],80,"up","Raise to shoulder height, control the descent."]];
+window.saveSess=async()=>{const q=scores.length?Math.round(scores.reduce((a,b)=>a+b)/scores.length):0;await api("/api/vision","POST",{exercise:EX[ex][0],reps,quality:q});$("#msg").textContent="Session saved ✓ (counts toward ACWR)"};
+let ex=0,reps=0,phase="READY",lm,running=false,scores=[];
+$("#exs").innerHTML=EX.map((e,i)=>`<button class="pill ${i?"":"on"}" data-i="${i}"><b>${e[0]}</b><small>${e[1]}</small></button>`).join("");
+$("#exs").onclick=e=>{const b=e.target.closest(".pill");if(!b)return;ex=+b.dataset.i;reps=0;phase="READY";scores=[];document.querySelectorAll(".pill").forEach(p=>p.classList.toggle("on",p===b));ui()};
+function ang(a,b,c){const v1=[a.x-b.x,a.y-b.y],v2=[c.x-b.x,c.y-b.y];const d=v1[0]*v2[0]+v1[1]*v2[1],m=Math.hypot(...v1)*Math.hypot(...v2);return m?Math.acos(Math.max(-1,Math.min(1,d/m)))*180/Math.PI:0}
+function ui(a){$("#reps").textContent=reps;$("#ph").textContent=phase;if(a!=null)$("#an").textContent=Math.round(a)+"°"}
+window.start=async()=>{
+  $("#msg").textContent="Loading pose model…";
+  try{
+    const fs=await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+    lm=await PoseLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",delegate:"GPU"},runningMode:"VIDEO",numPoses:1});
+    const s=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480}});
+    const v=$("#v");v.srcObject=s;await v.play();$("#c").width=v.videoWidth;$("#c").height=v.videoHeight;
+    running=true;$("#go").textContent="Camera on";$("#msg").textContent="Tracking…";loop();
+  }catch(e){$("#msg").textContent="Error: "+e.message+" (allow camera & open via http://localhost:3000)"}
+};
+let last=-1;
+function loop(){if(!running)return;const v=$("#v"),c=$("#c"),x=c.getContext("2d");
+  if(v.currentTime!==last){last=v.currentTime;const r=lm.detectForVideo(v,performance.now());x.clearRect(0,0,c.width,c.height);
+    const p=r.landmarks[0];if(p){const e=EX[ex],off=(p[e[2][1]].visibility>=p[e[2][1]+1].visibility)?0:1;
+      const [a,b,cc]=e[2].map(i=>p[i+off]),A=ang(a,b,cc),m=e[3];let ok;
+      if(e[4]==="hold"){phase=A>=165&&A<=185?"HOLD":"SAG";ok=phase==="HOLD"}
+      else{const low=e[4]==="down"?A<m:A>m,high=e[4]==="down"?A>m+50:A<m-50;
+        if(low)phase="BOTTOM";else if(high){if(phase==="BOTTOM"){reps++;scores.push(Math.max(0,100-Math.abs(A-m)/2))}phase="TOP"}
+        ok=e[4]==="down"?A<m+40:A>m-40}
+      const col=ok?"#34d399":"#f43f5e",du=new DrawingUtils(x);
+      du.drawConnectors(p,PoseLandmarker.POSE_CONNECTIONS,{color:col,lineWidth:4});du.drawLandmarks(p,{color:"#fff",radius:3});
+      const q=scores.length?Math.round(scores.reduce((s,n)=>s+n)/scores.length):null;
+      $("#q").textContent=q!=null?q+"%":"–";$("#qb").style.width=(q||0)+"%";
+      // fatigue-related feedback: compare early-session vs recent rep quality (report §3 AI Vision Trainer Pipeline)
+      let cue=ok?e[5]:"⚠ Form deviation — adjust range of motion.";
+      if(scores.length>=6){const early=scores.slice(0,3).reduce((a,b)=>a+b)/3,recent=scores.slice(-3).reduce((a,b)=>a+b)/3;if(recent<early-12)cue="⚠ Fatigue detected — quality dropped "+Math.round(early-recent)+"pts. Consider resting."}
+      $("#cue").textContent=cue;ui(A)}
+    else $("#msg").textContent="No body detected — step back so your full body is in frame."}
+  requestAnimationFrame(loop)}
+
+// ---- store ----
+let lastResults=[],sortMode="choice";
+window.setSort=m=>{sortMode=m;$("#sortChoice").classList.toggle("on",m==="choice");$("#sortPrice").classList.toggle("on",m==="price");renderResults()};
+window.search=async()=>{const q=$("#q2").value.trim();if(!q)return;$("#res").innerHTML='<div class="card mu">Searching…</div>';
+  const j=await(await fetch("/api/prices?q="+encodeURIComponent(q))).json();
+  if(j.noKey){$("#res").innerHTML='<div class="card"><b>No price API key set</b><p class="mu">Set SERPAPI_KEY to get live, sortable prices. For now, open each store pre-sorted by price:</p>'+j.results.map(r=>`<div class="r"><b>${r.source}</b><a class="p" href="${r.link}" target="_blank">Search lowest price ↗</a></div>`).join("")+"</div>";return}
+  if(!j.results.length){$("#res").innerHTML='<div class="card mu">No results.</div>';return}
+  lastResults=j.results.slice(0,20);renderResults()};
+function renderResults(){
+  // "Our Choice" = best rating-ish heuristic (source trust + mid-price relevance order from API); "Lowest Price" = pure ascending price
+  const byChoice=[...lastResults]; // API already returns relevance order for choice mode
+  const list=sortMode==="price"?[...lastResults].sort((a,b)=>a.price-b.price):byChoice;
+  const cheapest=Math.min(...lastResults.map(r=>r.price));
+  $("#res").innerHTML=`<div class="mu" style="margin:12px 2px">${sortMode==="price"?"Sorted by lowest price first.":"Sorted by our recommended match."} Cheapest overall: <b style="color:var(--g)">₹${cheapest.toLocaleString("en-IN")}</b></div>`+
+  list.map((r,i)=>`<div class="r ${r.price===cheapest?"best":""}"><img src="${r.thumb||""}" alt=""><div><b>${r.title}</b><div class="mu">${r.source} ${r.price===cheapest?'<span class="tag">LOWEST PRICE</span>':""}</div></div><div class="p">${r.priceText||"₹"+r.price}<br><a href="${r.link}" target="_blank" style="font-size:12px">Buy ↗</a><br><button class="btn" style="background:#1a202b;padding:4px 10px;font-size:11px;margin-top:4px" onclick='addCart(${JSON.stringify(r.title)},${r.price},${JSON.stringify(r.source)})'>+ Cart</button></div></div>`).join("");
+}
+window.addCart=async(name,price,source)=>{try{await api("/api/cart","POST",{name,price,source});alert(name+" added to cart")}catch(e){alert(e.message)}};
+</script><script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script src="/app.js"></script></body></html>
