@@ -6,7 +6,7 @@ import { fileURLToPath } from "url";
 import path from "path";
 const app = express(); app.use(express.json());
 const dir = path.dirname(fileURLToPath(import.meta.url));
-const KEY = process.env.SERPAPI_KEY, SECRET = process.env.JWT_SECRET || "change-me-aegisfit";
+const KEY = process.env.SERPAPI_KEY, SECRET = process.env.JWT_SECRET || "change-me-AgeisFit";
 const F = path.join(dir, "db.json"); // swap for MongoDB/Mongoose later; same shape
 const db = fs.existsSync(F) ? JSON.parse(fs.readFileSync(F)) : { users: [], logs: [], checkins: [], injuries: [], injuryHistory: [], vision: [], plans: [], carts: [], synced: [], healthPairs: [], healthData: [] };
 for (const k of ["injuryHistory", "carts", "synced", "healthPairs", "healthData"]) if (!db[k]) db[k] = []; // migrate older db.json files
@@ -133,14 +133,14 @@ app.post("/api/wearable/sync", auth, (req, res) => {
 function now_minus(n) { return Date.now() - n * 36e5; }
 
 // ---- Android Health Connect bridge ----
-// The browser cannot read Android Health Connect directly. AegisFit's companion
+// The browser cannot read Android Health Connect directly. AgeisFit's companion
 // Android app reads Health Connect on-device and posts the selected metrics here.
 app.post("/api/healthconnect/pair", auth, (req, res) => {
   db.healthPairs = db.healthPairs.filter(p => p.expiresAt > Date.now() && p.uid !== req.uid);
   const code = String(Math.floor(100000 + Math.random() * 900000));
   db.healthPairs.push({ uid: req.uid, code, createdAt: Date.now(), expiresAt: Date.now() + 10 * 60e3, usedAt: null });
   save();
-  res.json({ code, expiresAt: Date.now() + 10 * 60e3, message: "Enter this code in the AegisFit Android app." });
+  res.json({ code, expiresAt: Date.now() + 10 * 60e3, message: "Enter this code in the AgeisFit Android app." });
 });
 app.get("/api/healthconnect/status", auth, (req, res) => {
   const row = mine("healthData", req.uid).sort((a,b) => b.syncedAt - a.syncedAt)[0] || null;
@@ -149,7 +149,7 @@ app.get("/api/healthconnect/status", auth, (req, res) => {
 app.post("/api/healthconnect/sync", async (req, res) => {
   const { code, steps = 0, calories = 0, avgHeartRate = null, startTime = null, endTime = null, device = "Android" } = req.body || {};
   const pair = db.healthPairs.find(p => p.code === String(code || "") && p.expiresAt > Date.now());
-  if (!pair) return res.status(401).json({ error: "Invalid or expired pairing code. Generate a new code in AegisFit Devices." });
+  if (!pair) return res.status(401).json({ error: "Invalid or expired pairing code. Generate a new code in AgeisFit Devices." });
   const clean = { uid: pair.uid, steps: Math.max(0, Number(steps) || 0), calories: Math.max(0, Number(calories) || 0), avgHeartRate: avgHeartRate == null ? null : Math.max(0, Number(avgHeartRate) || 0), startTime, endTime, device, syncedAt: Date.now() };
   db.healthData = db.healthData.filter(x => x.uid !== pair.uid);
   db.healthData.push(clean);
@@ -190,4 +190,5 @@ app.get("/api/prices", async (req, res) => {
   } catch (e) { res.status(500).json({ error: String(e) }); }
 });
 
-app.listen(3000, () => console.log("AegisFit running -> http://localhost:3000"));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`AgeisFit running -> http://localhost:${PORT}`));
