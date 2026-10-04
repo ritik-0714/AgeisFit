@@ -34,54 +34,118 @@ header{background:#06080c;position:sticky;top:0;z-index:5}.tg{background:#34d399
 <div style="margin-top:12px;display:flex;gap:10px;align-items:center"><button class="btn" id="go" onclick="start()">Start Camera</button><button class="btn" style="background:#1a202b" onclick="saveSess()">Save session</button><span id="msg" class="mu">Stand 2–3 m back so your full body is visible.</span></div></div>
 <div><div class="card"><div class="mu" style="font:11px monospace">COMPLETED REPS</div><div class="big" id="reps">0</div><div class="mu">Phase: <b id="ph">READY</b> · Angle: <b id="an">–</b></div></div>
 <div class="card"><b>Movement quality</b> <b id="q" style="float:right;color:var(--g)">–</b><div class="bar" style="margin:12px 0"><i id="qb" style="width:0"></i></div><div class="mu" id="cue">—</div></div></div></div></section>
-
+ 
 <section id="p2" class="hidden"><div class="card"><h2 style="margin-top:0">Smart Equipment &amp; Gear Store</h2><p class="mu" style="margin-top:-6px">Product discovery and price comparison across Amazon, Flipkart, Decathlon and Myntra.</p>
 <div style="display:flex;gap:10px;flex-wrap:wrap"><input class="in" id="q2" placeholder="e.g. 10kg dumbbells, whey protein, running shoes" onkeydown="if(event.key==='Enter')search()"><button class="btn" onclick="search()">Search</button></div>
 <div style="display:flex;gap:8px;margin-top:14px"><button class="pill on" id="sortChoice" onclick="setSort('choice')">⭐ By Our Choice</button><button class="pill" id="sortPrice" onclick="setSort('price')">₹ By Lowest Price</button></div></div>
 <div id="res"></div></section></main>
-
+ 
 <script type="module">
-import { PoseLandmarker, FilesetResolver, DrawingUtils } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+// NOTE: the pose library is loaded lazily inside start(), never at the top of the file.
+// A static top-level `import ... from <url>` would make this ENTIRE script fail silently
+// if that one request is ever blocked (slow network, extension, corporate firewall) —
+// which breaks every button on the page, not just the camera. Keeping it lazy means a
+// failed/slow camera-library load only affects the camera feature.
+let PoseLandmarker, FilesetResolver, DrawingUtils;
 const $=s=>document.querySelector(s);
-// [name, hint, joints(A,B,C), threshold, mode]
+// [name, hint, joints(A,B,C), threshold, mode, cue, bilateral?]
 // 8 exercises per report §5 AI Vision Trainer Module: Squat, Push-up, Lunge, Bicep Curl, Overhead Press, Jumping Jack, Plank, Side Lateral Raise
-const EX=[["Squat","Knee <100°",[23,25,27],100,"down","Chest up, hips below knees."],["Push-up","Elbow <90°",[11,13,15],90,"down","Body in a straight line."],["Lunge","Front knee <105°",[23,25,27],105,"down","Front knee tracks over toes, torso upright."],["Bicep Curl","Flexion <55°",[11,13,15],55,"down","Pin elbows to your sides."],["Overhead Press","Lockout >155°",[11,13,15],155,"up","Press to full lockout overhead."],["Jumping Jack","Arm raise >140°",[23,11,15],140,"up","Full arm range each rep, land softly."],["Plank","Spine 165–185°",[11,23,27],165,"hold","Squeeze glutes, don't sag."],["Side Lateral Raise","Abduction >80°",[23,11,13],80,"up","Raise to shoulder height, control the descent."]];
+// Jumping Jack & Side Lateral Raise both use true shoulder-abduction geometry (hip→shoulder→elbow),
+// not hip→shoulder→wrist: wrist position also moves when the elbow bends, which previously let an
+// elbow-bend alone register as "arm raised" and threw off both rep counts and form accuracy.
+const EX=[["Squat","Knee <100°",[23,25,27],100,"down","Chest up, hips below knees.",false],
+["Push-up","Elbow <90°",[11,13,15],90,"down","Body in a straight line.",false],
+["Lunge","Front knee <105°",[23,25,27],105,"down","Front knee tracks over toes, torso upright.",false],
+["Bicep Curl","Flexion <55°",[11,13,15],55,"down","Pin elbows to your sides.",false],
+["Overhead Press","Lockout >155°",[11,13,15],155,"up","Press to full lockout overhead.",false],
+["Jumping Jack","Arm raise >150°",[23,11,13],150,"up","Full arm range each rep, land softly.",true],
+["Plank","Spine 165–185°",[11,23,27],165,"hold","Squeeze glutes, don't sag.",false],
+["Side Lateral Raise","Abduction >80°",[23,11,13],80,"up","Raise to shoulder height, control the descent.",false]];
 window.saveSess=async()=>{const q=scores.length?Math.round(scores.reduce((a,b)=>a+b)/scores.length):0;await api("/api/vision","POST",{exercise:EX[ex][0],reps,quality:q});$("#msg").textContent="Session saved ✓ (counts toward ACWR)"};
-let ex=0,reps=0,phase="READY",lm,running=false,scores=[];
+let ex=0,reps=0,phase="READY",lm,running=false,scores=[],smoothA=null,confirmN=0,pendingPhase=null,lowVisN=0;
+const VIS_MIN=.55,CONFIRM_FRAMES=3,EMA_ALPHA=.35; // tuned for ~30fps webcam input
 $("#exs").innerHTML=EX.map((e,i)=>`<button class="pill ${i?"":"on"}" data-i="${i}"><b>${e[0]}</b><small>${e[1]}</small></button>`).join("");
-$("#exs").onclick=e=>{const b=e.target.closest(".pill");if(!b)return;ex=+b.dataset.i;reps=0;phase="READY";scores=[];document.querySelectorAll(".pill").forEach(p=>p.classList.toggle("on",p===b));ui()};
+$("#exs").onclick=e=>{const b=e.target.closest(".pill");if(!b)return;ex=+b.dataset.i;reps=0;phase="READY";scores=[];smoothA=null;confirmN=0;pendingPhase=null;document.querySelectorAll(".pill").forEach(p=>p.classList.toggle("on",p===b));ui()};
 function ang(a,b,c){const v1=[a.x-b.x,a.y-b.y],v2=[c.x-b.x,c.y-b.y];const d=v1[0]*v2[0]+v1[1]*v2[1],m=Math.hypot(...v1)*Math.hypot(...v2);return m?Math.acos(Math.max(-1,Math.min(1,d/m)))*180/Math.PI:0}
 function ui(a){$("#reps").textContent=reps;$("#ph").textContent=phase;if(a!=null)$("#an").textContent=Math.round(a)+"°"}
 window.start=async()=>{
   $("#msg").textContent="Loading pose model…";
   try{
+    if(!PoseLandmarker){
+      const mod=await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14");
+      ({PoseLandmarker,FilesetResolver,DrawingUtils}=mod);
+    }
     const fs=await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
-    lm=await PoseLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",delegate:"GPU"},runningMode:"VIDEO",numPoses:1});
-    const s=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480}});
+    // "full" model: meaningfully more accurate joint localization than "lite" (the previous
+    // model), at a small speed cost that's unnoticeable at webcam frame rates. GPU delegate is
+    // tried first but silently fails on some Android WebViews, so we fall back to CPU instead of
+    // leaving the camera stuck on "Loading pose model…" forever.
+    try{
+      lm=await PoseLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",delegate:"GPU"},runningMode:"VIDEO",numPoses:1});
+    }catch(gpuErr){
+      try{lm=await PoseLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",delegate:"CPU"},runningMode:"VIDEO",numPoses:1});}
+      catch(fullErr){lm=await PoseLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",delegate:"CPU"},runningMode:"VIDEO",numPoses:1});}
+    }
+    const s=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,frameRate:{ideal:30}}});
     const v=$("#v");v.srcObject=s;await v.play();$("#c").width=v.videoWidth;$("#c").height=v.videoHeight;
     running=true;$("#go").textContent="Camera on";$("#msg").textContent="Tracking…";loop();
   }catch(e){$("#msg").textContent="Error: "+e.message+" (allow camera & open via http://localhost:3000)"}
 };
 let last=-1;
+// one-sided abduction/flexion angle at a joint triple, with its own visibility score
+function sideAngle(p,triple,off){const [ai,bi,ci]=triple;const a=p[ai+off],b=p[bi+off],c=p[ci+off];
+  return {A:ang(a,b,c),vis:Math.min(a.visibility,b.visibility,c.visibility)};}
 function loop(){if(!running)return;const v=$("#v"),c=$("#c"),x=c.getContext("2d");
   if(v.currentTime!==last){last=v.currentTime;const r=lm.detectForVideo(v,performance.now());x.clearRect(0,0,c.width,c.height);
-    const p=r.landmarks[0];if(p){const e=EX[ex],off=(p[e[2][1]].visibility>=p[e[2][1]+1].visibility)?0:1;
-      const [a,b,cc]=e[2].map(i=>p[i+off]),A=ang(a,b,cc),m=e[3];let ok;
-      if(e[4]==="hold"){phase=A>=165&&A<=185?"HOLD":"SAG";ok=phase==="HOLD"}
-      else{const low=e[4]==="down"?A<m:A>m,high=e[4]==="down"?A>m+50:A<m-50;
-        if(low)phase="BOTTOM";else if(high){if(phase==="BOTTOM"){reps++;scores.push(Math.max(0,100-Math.abs(A-m)/2))}phase="TOP"}
-        ok=e[4]==="down"?A<m+40:A>m-40}
-      const col=ok?"#34d399":"#f43f5e",du=new DrawingUtils(x);
-      du.drawConnectors(p,PoseLandmarker.POSE_CONNECTIONS,{color:col,lineWidth:4});du.drawLandmarks(p,{color:"#fff",radius:3});
-      const q=scores.length?Math.round(scores.reduce((s,n)=>s+n)/scores.length):null;
-      $("#q").textContent=q!=null?q+"%":"–";$("#qb").style.width=(q||0)+"%";
-      // fatigue-related feedback: compare early-session vs recent rep quality (report §3 AI Vision Trainer Pipeline)
-      let cue=ok?e[5]:"⚠ Form deviation — adjust range of motion.";
-      if(scores.length>=6){const early=scores.slice(0,3).reduce((a,b)=>a+b)/3,recent=scores.slice(-3).reduce((a,b)=>a+b)/3;if(recent<early-12)cue="⚠ Fatigue detected — quality dropped "+Math.round(early-recent)+"pts. Consider resting."}
-      $("#cue").textContent=cue;ui(A)}
-    else $("#msg").textContent="No body detected — step back so your full body is in frame."}
+    const p=r.landmarks[0];
+    if(p){
+      const e=EX[ex];
+      let A,vis;
+      if(e[6]){ // bilateral exercise (Jumping Jack): average both sides instead of picking one,
+                // so a single occluded arm doesn't wrongly read as "not raised"
+        const L=sideAngle(p,e[2],0),R=sideAngle(p,e[2],1);
+        if(L.vis>=VIS_MIN&&R.vis>=VIS_MIN){A=(L.A+R.A)/2;vis=(L.vis+R.vis)/2}
+        else if(L.vis>=VIS_MIN){A=L.A;vis=L.vis}
+        else{A=R.A;vis=R.vis}
+      }else{ // unilateral: use whichever side is currently more visible to the camera
+        const L=sideAngle(p,e[2],0),R=sideAngle(p,e[2],1);
+        const pick=L.vis>=R.vis?L:R;A=pick.A;vis=pick.vis;
+      }
+      const du=new DrawingUtils(x);
+      if(vis<VIS_MIN){
+        lowVisN++;
+        du.drawConnectors(p,PoseLandmarker.POSE_CONNECTIONS,{color:"#64748b",lineWidth:3});du.drawLandmarks(p,{color:"#94a3b8",radius:3});
+        if(lowVisN>=CONFIRM_FRAMES)$("#msg").textContent="Low visibility on tracked joints — face the camera and clear the frame.";
+      }else{
+        lowVisN=0;
+        // exponential moving average smooths frame-to-frame landmark jitter so the threshold
+        // crossing (and the rep count / green-red color) doesn't flicker on noisy single frames
+        smoothA=smoothA==null?A:smoothA*(1-EMA_ALPHA)+A*EMA_ALPHA;
+        const m=e[3];let ok,wantPhase;
+        if(e[4]==="hold"){wantPhase=smoothA>=165&&smoothA<=185?"HOLD":"SAG";ok=wantPhase==="HOLD"}
+        else{const low=e[4]==="down"?smoothA<m:smoothA>m,high=e[4]==="down"?smoothA>m+50:smoothA<m-50;
+          wantPhase=low?"BOTTOM":high?"TOP":phase;ok=e[4]==="down"?smoothA<m+40:smoothA>m-40}
+        // require the same phase for several consecutive frames before acting on it — a single
+        // noisy frame can no longer register a false rep or flip the form color back and forth
+        if(wantPhase===pendingPhase)confirmN++;else{pendingPhase=wantPhase;confirmN=1}
+        if(confirmN>=CONFIRM_FRAMES&&wantPhase!==phase){
+          if(e[4]!=="hold"&&wantPhase==="TOP"&&phase==="BOTTOM"){reps++;scores.push(Math.max(0,100-Math.abs(smoothA-m)/2))}
+          phase=wantPhase;
+        }
+        const col=ok?"#34d399":"#f43f5e";
+        du.drawConnectors(p,PoseLandmarker.POSE_CONNECTIONS,{color:col,lineWidth:4});du.drawLandmarks(p,{color:"#fff",radius:3});
+        const q=scores.length?Math.round(scores.reduce((s,n)=>s+n)/scores.length):null;
+        $("#q").textContent=q!=null?q+"%":"–";$("#qb").style.width=(q||0)+"%";
+        // fatigue-related feedback: compare early-session vs recent rep quality (report §3 AI Vision Trainer Pipeline)
+        let cue=ok?e[5]:"⚠ Form deviation — adjust range of motion.";
+        if(scores.length>=6){const early=scores.slice(0,3).reduce((a,b)=>a+b)/3,recent=scores.slice(-3).reduce((a,b)=>a+b)/3;if(recent<early-12)cue="⚠ Fatigue detected — quality dropped "+Math.round(early-recent)+"pts. Consider resting."}
+        $("#cue").textContent=cue;$("#msg").textContent="Tracking…";ui(smoothA);
+      }
+    }
+    else{$("#msg").textContent="No body detected — step back so your full body is in frame.";smoothA=null}
+  }
   requestAnimationFrame(loop)}
-
+ 
 // ---- store ----
 let lastResults=[],sortMode="choice";
 window.setSort=m=>{sortMode=m;$("#sortChoice").classList.toggle("on",m==="choice");$("#sortPrice").classList.toggle("on",m==="price");renderResults()};
@@ -100,3 +164,7 @@ function renderResults(){
 }
 window.addCart=async(name,price,source)=>{try{await api("/api/cart","POST",{name,price,source});alert(name+" added to cart")}catch(e){alert(e.message)}};
 </script><script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script><script src="/app.js"></script></body></html>
+ 
+
+
+
